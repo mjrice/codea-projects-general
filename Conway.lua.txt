@@ -1,0 +1,212 @@
+-- Conway
+-- A simple implementation of Conway's Game of Life for the ipad, ala Codea
+-- written by Marty Rice (c) 2020
+-- ------------------------------------------------------------------------
+-- The rules (https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life):
+-- Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+-- Any live cell with two or three live neighbours lives on to the next generation.
+-- Any live cell with more than three live neighbours dies, as if by overpopulation.
+-- Any dead cell with exactly three live neighbours becomes a live cell, 
+-- as if by reproduction.
+
+-- initial setup
+function setup()
+    print("Hello Conway's World!")
+    --gridSize=10
+    gridScale = 25
+    maxGridSize = 120
+    xoffset = 0
+    yoffset = 0
+    panOffsetX = 0
+    panOffsetY = 0
+    parameter.boolean("Run")
+    parameter.action("Step Once",updateState)
+    parameter.boolean("showGrid")
+    parameter.integer("gridSizeX",5,maxGridSize,WIDTH/10)
+    parameter.integer("gridSizeY",5,maxGridSize,HEIGHT/10)
+    parameter.integer("gridScale",10,30,10)
+    parameter.color("colorPersist",0,255,111)
+    parameter.color("colorBirth",255,255,0)
+    --parameter.number("updateRate")
+    
+   -- parameter.action()
+    cellState={}
+    cellStateB={}
+    cellColor={}
+    curRunMode = false
+    touchingStarted=false
+    
+    for i=1,maxGridSize do
+        for j=1,maxGridSize do
+            setState(i,j,math.random(0,1))
+        end
+    end
+    
+    lastDrawTime=ElapsedTime
+end
+
+function getAddress(x,y)
+    local arypos = 1
+    if x < 1 then x = gridSizeX end
+    if y < 1 then y = gridSizeY end
+    if x > gridSizeX then x = 1 end 
+    if y > gridSizeY then y = 1 end
+    arypos = (y-1)*maxGridSize + x
+    return arypos
+end
+
+function getState(x,y)
+    local arypos = getAddress(x,y)   
+    if cellState[arypos] ~= nil then
+        if cellColor[arypos] == nil then
+            if cellState[arypos] == 1 then cellColor[arypos]=colorBirth
+            else cellColor[arypos]=color(0)
+            end
+        end
+        return cellState[arypos],cellColor[arypos]
+    end
+    return 0,color(0)
+end
+
+function setState(x,y,value)
+    local arypos = getAddress(x,y)
+    cellState[arypos]=value
+    if value==1 and cellColor[arypos] == color(0) then
+       cellColor[arypos]=colorBirth
+    end
+end
+
+function getNextState(x,y)
+    local arypos = getAddress(x,y)   
+    if cellStateB[arypos] ~= nil then
+        return cellStateB[arypos]
+    end
+    return 0
+end
+
+function setNextState(x,y,value)
+    local arypos = getAddress(x,y)
+    if value == 1 then
+        if cellStateB[arypos] == 1  then
+            cellColor[arypos]=colorPersist
+        else
+            cellColor[arypos]=colorBirth
+        end
+    else
+        cellColor[arypos]=color(0)
+    end
+    cellStateB[arypos]=value
+end
+
+function updateState()
+    for i=1,gridSizeX do
+        for j=1,gridSizeY do
+           local neighbors = 0
+            for m=-1,1 do
+                for n=-1,1 do
+                    if m==0 and n==0 then
+                    else
+                        if getState(i+m,j+n)==1 then neighbors=neighbors+1 end
+                    end
+                end
+            end
+            
+            local st,c = getState(i,j)
+            
+            if st == 0 then
+                    if neighbors == 3 then
+                        setNextState(i,j,1)
+                    end
+            else
+                if neighbors < 2 or neighbors > 3 then 
+                    setNextState(i,j,0)
+                    --print ("killed "..i..","..j .. " counted " .. neighbors)
+                else
+                    setNextState(i,j,1) -- persist
+                end            
+            end
+        end
+    end
+    
+    for i=1,gridSizeX do
+        for j=1,gridSizeY do
+            setState(i,j,getNextState(i,j))
+        end
+    end
+end
+
+-- This function gets called once every frame
+function draw()
+    if curRunMode==false and Run == true then
+        print("starting simulation...")
+    end
+    if curRunMode==true and Run == false then 
+        print("pausing simulation.")
+    end
+    curRunMode=Run
+    
+    --local updateRate = 0
+    --local delta = ElapsedTime-lastDrawTime
+    --if delta > updateRate then 
+        if Run == true then updateState() end
+    --    lastDrawTime=ElapsedTime
+    --end
+    
+    -- This sets background color 
+    background(32,32,32)
+    
+    -- This sets the line thickness
+    strokeWidth(1)
+    
+    -- Do your drawing here
+    for i=0,gridSizeX do
+        for j=0,gridSizeY do
+            x=panOffsetX + xoffset+i*gridScale
+            y=panOffsetY + yoffset+j*gridScale
+            if showGrid == true then
+                stroke(58, 53, 220)
+                line(x-2,y-2,x+2,y+2)
+                line(x+2,y-2,x-2,y+2)
+            end
+            
+            if i>0 and j>0 then -- there is one additional row/column of grid markers 
+                value,colorvalue=getState(i,j)
+                if value== 1 then
+                    stroke(colorvalue)
+                    fill(colorvalue)
+                    ellipse(x-gridScale/2,y-gridScale/2,gridScale)
+                end
+            end
+        end
+    end
+    
+    -- handle touching
+    if CurrentTouch.state == BEGAN then
+        panStartX=CurrentTouch.x
+        panStartY=CurrentTouch.y
+        touchingStarted=true
+    elseif CurrentTouch.state == MOVING then
+        if panStartX==nil then panStartX=CurrentTouch.x end
+        if panStartY==nil then panStartY=CurrentTouch.y end
+        panOffsetX = CurrentTouch.x-panStartX
+        panOffsetY = CurrentTouch.y-panStartY
+    elseif CurrentTouch.state == ENDED and touchingStarted==true then
+        touchingStarted=false
+        if CurrentTouch.x==panStartX and CurrentTouch.y==panStartY then
+            -- manually turn on a cell by touching it.
+            xval = math.floor((panStartX-xoffset)/gridScale+0.5)
+            yval = math.floor((panStartY-yoffset)/gridScale+0.5)
+            --print("touched element at " .. xval .. "," .. yval.." offsx="..xoffset)
+            setState(xval,yval,1)
+        else
+            xoffset = xoffset + panOffsetX
+            yoffset = yoffset + panOffsetY
+            panOffsetX = 0
+            panOffsetY = 0
+            if xoffset>0 then xoffset=0 end
+            if yoffset>0 then yoffset=0 end
+        end
+    end
+    
+end
+
