@@ -1,0 +1,170 @@
+-- Nbody
+-- simulation of a body in orbit around multiple fixed objects
+--
+
+body = class()
+distance_offsetor = 20
+trail = {} 
+nexttrailement=1
+trail_len = 800
+timeFactor = 2 
+
+function body:init(mass,radius,colorvalue)
+    print("init body with mass " .. mass )
+    
+    local w = math.floor(WIDTH/4)
+    local h = math.floor(HEIGHT/4)
+    self.pos    = vec2(WIDTH/2 + math.random(-w,w), HEIGHT/2 + math.random(-h,h))
+    self.radius = radius
+    self.vel    = vec2(0, 0)
+    self.mass   = mass
+    self.color  = colorvalue
+    self.Fnet = vec2(0,0)
+end
+
+function body:draw()
+    alpha=255
+    fill(self.color)
+    noStroke()
+    ellipse(self.pos.x, self.pos.y, 2 * self.radius)
+end
+
+function loadPresetState(n)
+    if true then
+        print("loading preset")  
+        Run = false 
+        Nbodies = 3 
+        fixedBodies = {} 
+        for i=1,Nbodies do 
+            fixedBodies[i] = body(10,10,rcolorvalue())
+            fixedBodies[i].pos = vec2(100 + (WIDTH/4 * i),HEIGHT/2)
+            print("pos = " .. fixedBodies[i].pos.x .. "," .. fixedBodies[i].pos.y)
+        end
+    end
+end
+
+function rcolorvalue()
+    return color(math.random(128,255),math.random(128,255),math.random(0,25))
+end 
+
+function initFixedBodies()
+    fixedBodies = {}
+    for i=1,Nbodies do 
+        local size_mass = math.random(10,30) 
+        fixedBodies[i] = body(size_mass,size_mass,rcolorvalue())
+    end
+    fixedBodiesCreated = Nbodies
+end
+
+function pushFreebody()
+    vr = vec2(5-math.random(0,10),5-math.random(0,10))
+    
+    freeBodies[1].vel = freeBodies[1].vel + vr
+    
+    print("added random velocity " .. vr.x .. "," .. vr.y)
+end
+
+-- Use this function to perform your initial setup
+function setup()
+    print("Beginning N-body simulation.")
+
+    parameter.action("Load preset",loadPresetState)    
+    parameter.integer("Nbodies",1,40)
+    parameter.number("timeFactor",1,10)
+    parameter.action("Initialize Bodies",initFixedBodies)
+    parameter.action("Give free body initial velocity",pushFreebody)
+    parameter.boolean("Run",false)
+    initFixedBodies()
+    freeBodies  = {body(1,8,color(0,55,255))}
+    frame_count = 0 
+    --backingMode(RETAINED)
+    
+    for i=1,trail_len do 
+        trail[i] = freeBodies[1].pos
+    end
+    nexttrailement=trail_len
+end
+
+function calculateForces()
+    -- compute  the force on each body 
+    -- force = G * M1 * M2 / r^2
+    --    G: constant
+    --    M1: first mass
+    --    M2: second mass
+    --    r: distance between objects (centers of gravity)
+    local G = 200 -- arbitrary constant
+    -- calculate force on freebody by each fixedbody
+    local F = G 
+    freeBodies[1].Fnet = vec2(0,0) 
+    
+    for i = 1,fixedBodiesCreated do 
+        local dist = freeBodies[1].pos:dist(fixedBodies[i].pos) + distance_offsetor
+        F = G * freeBodies[1].mass * fixedBodies[i].mass / (dist*dist)    
+        local vdir = fixedBodies[i].pos - freeBodies[1].pos
+        vdir = vdir:normalize()
+        vdir = vdir * F
+        --print("F = " .. vdir.x .. "," .. vdir.y)
+        freeBodies[1].Fnet = freeBodies[1].Fnet + vdir
+    end
+    --print("Fnet = " .. Fnet.x .. ", " .. Fnet.y)
+    
+    freeBodies[1].vel = freeBodies[1].vel + (freeBodies[1].mass*freeBodies[1].Fnet)
+    if freeBodies[1].vel:len() > 200 then 
+        freeBodies[1].vel = freeBodies[1].vel:normalize() * 200
+    end
+end
+
+-- This function gets called once every frame
+function draw()
+    -- This sets a dark background color 
+    background(0, 0, 0)
+
+    -- This sets the line thickness
+    strokeWidth(1)
+
+    for i=1,fixedBodiesCreated do 
+        fixedBodies[i]:draw()
+    end
+       
+    freeBodies[1]:draw()
+    if Run == true then 
+    calculateForces() 
+    
+    frame_count = frame_count + 1 
+    
+    if math.floor(frame_count/10) == frame_count / 10 then 
+        trail[nexttrailement] = freeBodies[1].pos 
+        nexttrailement = nexttrailement + 1 
+        if nexttrailement > trail_len then 
+            for i=1,trail_len-1 do 
+                trail[i] = trail[i+1]
+            end
+            nexttrailement=trail_len
+        end
+    end
+
+    smooth()
+    strokeWidth(1)    
+    stroke (128,128,128)
+    for i=2,trail_len-1 do 
+        line(trail[i-1].x, trail[i-1].y, trail[i].x, trail[i].y)
+        --ellipse(trail[i].x,trail[i].y,2)
+    end 
+    
+    freeBodies[1].pos = freeBodies[1].pos + (timeFactor * DeltaTime * freeBodies[1].vel) 
+    end 
+    
+    font("Courier")
+    fill(128)
+    fontSize(12)
+    textAlign(RIGHT)
+    str = "Loc: " .. string.format("%.1f",freeBodies[1].pos.x) .. ", " .. string.format("%.1f",freeBodies[1].pos.y)
+    text(str,WIDTH-100,10)
+    str = "Vel: " .. string.format("%.1f",freeBodies[1].vel.x) .. ", " .. string.format("%.1f",freeBodies[1].vel.y)
+    text(str,WIDTH-100,30)
+    
+    str = "Force: " .. string.format("%.2f",freeBodies[1].Fnet.x) .. ", " .. string.format("%.2f",freeBodies[1].Fnet.y)
+    text(str,WIDTH-100,50)
+end
+
+
